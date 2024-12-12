@@ -1,9 +1,8 @@
 import { FormSchema } from ".";
 import { webV1UserPosted } from "@/platforms/xhs/http/user";
 import type { NoteInfo } from "@/platforms/xhs/http/user.d";
-import { NoteCard, webV1Feed } from "@/platforms/xhs/http/note";
+import {  webV1Feed } from "@/platforms/xhs/http/note";
 import { Processor as PostProcessor } from '../post';
-import { TaskFileInfo } from "@/components/task";
 
 export class Processor extends PostProcessor<FormSchema & {
     postParams: Array<{

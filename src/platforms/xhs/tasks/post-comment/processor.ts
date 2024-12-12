@@ -5,86 +5,74 @@ import { getCommentPage, getCommentSubPage } from "@/platforms/xhs/http/comment"
 
 export class Processor extends TaskProcessor<FormSchema, Comment[]> {
 
+    // 主处理逻辑：获取笔记评论并保存到任务数据中
     async execute() {
-        const { postParams, limitPerId } = this.condition;
-        let total = postParams.length * limitPerId;
-        this.actions.setTotal(total);
+        const { postParams, limitPerId } = this.condition; // 从表单条件获取笔记参数和每条笔记的评论数量限制
+        let total = postParams.length * limitPerId; // 计算任务总量
+        this.actions.setTotal(total); // 设置任务总量
         let completed = 0;
-        this.actions.setCompleted(completed);
+        this.actions.setCompleted(completed); // 初始化已完成任务计数
+
+        // 遍历每条笔记
         for (const postParam of postParams) {
-            const comments = await this.getNoteComments(postParam, limitPerId, completed);
-            const count = this.getCommentCount(comments);
-            total += count - limitPerId;
-            completed += count;
+            const comments = await this.getNoteComments(postParam, limitPerId, completed); // 获取笔记的评论
+            const count = this.getCommentCount(comments); // 统计评论总数
+            total += count - limitPerId; // 更新总任务量
+            completed += count; // 更新已完成任务数
             this.actions.setCompleted(completed);
             this.actions.setTotal(total);
-            //将采集到的数据绑定在 data 上
+            // 将评论数据绑定到任务的 data 属性中
             this.data[postParam.id] = comments;
         }
     }
 
+    // 获取文件导出信息，包括 Excel 数据和评论图片文件
     async getFileInfos(): Promise<Array<TaskFileInfo>> {
         const { postParams, needMedia } = this.condition;
         const dataList = [[
-            '评论ID',
-            '笔记ID',
-            '笔记链接',
-            '用户ID',
-            '用户名称',
-            '用户主页',
-            '评论内容',
-            '评论图片',
-            '评论时间',
-            '点赞数',
-            '子评论数',
-            'IP地址',
-            '一级评论ID',
-            '引用的评论ID',
-            '引用的用户ID',
-            '引用的用户名称',
-        ]];
-        const medias: TaskFileInfo[] = [];
+            '评论ID', '笔记ID', '笔记链接', '用户ID', '用户名称', '用户主页', '评论内容', '评论图片',
+            '评论时间', '点赞数', '子评论数', 'IP地址', '一级评论ID', '引用的评论ID', '引用的用户ID', '引用的用户名称',
+        ]]; // 定义表头
+
+        const medias: TaskFileInfo[] = []; // 存储图片文件信息
+
+        // 定义获取单条评论数据的方法
         const getRow = (comment: Comment | SubComment, postParam: {
             id: string;
             source: string;
             token: string;
         }): Array<any> => {
             const row = [];
-            row.push(comment.id);
-            row.push(comment.note_id);
-            row.push(`https://www.xiaohongshu.com/explore/${comment.note_id}??xsec_token=${postParam.token}&xsec_source=${postParam.source}`);
-            row.push(comment.user_info?.user_id);
-            row.push(comment.user_info?.nickname);
-            row.push(
-                `https://www.xiaohongshu.com/user/profile/${comment.user_info?.user_id}`,
-            );
-            row.push(comment.content);
-            row.push(comment.pictures?.map((o) => o.url_default)?.join('\n'));
-            if (needMedia) {
-                medias.push(...comment.pictures?.map((o,index) => {
-                    const info: TaskFileInfo = {
-                        path: comment.note_id,
-                        filename: `${comment.id}-图${index+1}.png`,
-                        type: "url",
-                        data: o.url_default
-                    }
-                    return info;
-                }) || []);
+            row.push(comment.id); // 评论ID
+            row.push(comment.note_id); // 笔记ID
+            row.push(`https://www.xiaohongshu.com/explore/${comment.note_id}??xsec_token=${postParam.token}&xsec_source=${postParam.source}`); // 笔记链接
+            row.push(comment.user_info?.user_id); // 用户ID
+            row.push(comment.user_info?.nickname); // 用户昵称
+            row.push(`https://www.xiaohongshu.com/user/profile/${comment.user_info?.user_id}`); // 用户主页
+            row.push(comment.content); // 评论内容
+            row.push(comment.pictures?.map((o) => o.url_default)?.join('\n')); // 评论图片
+            if (needMedia) { // 如果需要下载评论图片
+                // @ts-ignore
+                medias.push(...(comment.pictures?.map((o, index) => ({
+                    path: comment.note_id, // 存储路径
+                    filename: `${comment.id}-图${index + 1}.png`, // 文件名
+                    type: "url",
+                    data: o.url_default,
+                })) || []));
             }
-            row.push(comment.create_time && new Date(comment.create_time));
-            row.push(comment.like_count);
-            row.push(
-                'sub_comment_count' in comment ? comment?.sub_comment_count : '-',
-            );
-            row.push(comment.ip_location);
-
-            if ('target_comment' in comment) {
-                row.push(comment.target_comment?.id);
-                row.push(comment.target_comment?.user_info?.user_id);
-                row.push(comment.target_comment?.user_info?.nickname);
+            row.push(comment.create_time && new Date(comment.create_time)); // 评论时间
+            row.push(comment.like_count); // 点赞数
+            row.push('sub_comment_count' in comment ? comment.sub_comment_count : '-'); // 子评论数
+            row.push(comment.ip_location); // IP地址
+            if ('target_comment' in comment) { // 如果是引用评论
+                row.push(comment.target_comment?.id); // 引用的评论ID
+                row.push(comment.target_comment?.user_info?.user_id); // 引用的用户ID
+                row.push(comment.target_comment?.user_info?.nickname); // 引用的用户昵称
             }
             return row;
         };
+
+        // 遍历所有笔记，提取评论数据
         for (const postParam of postParams) {
             const comments = this.data[postParam.id];
             if (!comments) continue;
@@ -100,22 +88,15 @@ export class Processor extends TaskProcessor<FormSchema, Comment[]> {
         return [this.getExcelFileInfo(dataList, "小红书-笔记评论导出"), ...medias];
     }
 
-    /**
-     * 获取笔记的评论
-     * @param noteId 笔记ID
-     * @param limit 条数限制
-     */
-    async getNoteComments(
-        postParam: {
-            id: string;
-            source: string;
-            token: string;
-        },
-        limit: number,
-        completed: number = 0,
-    ): Promise<Comment[]> {
+    // 获取笔记的评论
+    async getNoteComments(postParam: {
+        id: string;
+        source: string;
+        token: string;
+    }, limit: number, completed: number = 0): Promise<Comment[]> {
         let cursor = '';
         const commentList: Comment[] = [];
+
         // 获取一级评论
         while (true) {
             const commentPage = await this.request(getCommentPage, {
@@ -125,22 +106,15 @@ export class Processor extends TaskProcessor<FormSchema, Comment[]> {
                 top_comment_id: '',
                 image_formats: 'jpg,webp,avif',
             });
-            // 增加评论数
             commentList.push(...commentPage.comments);
             cursor = commentPage.cursor;
-            // 更新进度
             let count = this.getCommentCount(commentList);
             this.actions.setCompleted(completed + count);
-            if (count >= limit) {
-                // 已经够了
-                return commentList;
-            }
-            if (!commentPage.has_more) {
-                // 没有更多评论了
-                break;
-            }
+            if (count >= limit) return commentList;
+            if (!commentPage.has_more) break; // 没有更多评论
         }
-        // 一级评论不够，获取子评论
+
+        // 获取子评论
         const hasMoreSubComments = commentList.filter((item) => item.sub_comment_has_more);
         for (const comment of hasMoreSubComments) {
             const subComments = await this.getNoteSubComments(
@@ -150,31 +124,17 @@ export class Processor extends TaskProcessor<FormSchema, Comment[]> {
                 limit - this.getCommentCount(commentList),
             );
             comment.sub_comments.push(...subComments);
-            if (this.getCommentCount(commentList) >= limit) {
-                // 已经够了
-                return commentList;
-            }
+            if (this.getCommentCount(commentList) >= limit) return commentList;
         }
         return commentList;
     }
 
-    /**
-     * 获取笔记的子评论
-     * @param noteId 笔记ID
-     * @param rootCommentId 根评论ID
-     * @param cursor 游标
-     * @param limit 条数限制
-     */
-    async getNoteSubComments(
-        postParam: {
-            id: string;
-            source: string;
-            token: string;
-        },
-        rootCommentId: string,
-        cursor: string,
-        limit: number,
-    ): Promise<SubComment[]> {
+    // 获取笔记的子评论
+    async getNoteSubComments(postParam: {
+        id: string;
+        source: string;
+        token: string;
+    }, rootCommentId: string, cursor: string, limit: number): Promise<SubComment[]> {
         const subCommentList: SubComment[] = [];
         const commentPage = await this.request(getCommentSubPage, {
             note_id: postParam.id,
@@ -187,17 +147,11 @@ export class Processor extends TaskProcessor<FormSchema, Comment[]> {
         });
         subCommentList.push(...commentPage.comments);
         const count = commentPage.comments.length;
-        // 更新进度
         this.actions.setCompleted(prev => prev + count);
-        if (count >= limit) {
-            // 足够了
-            return subCommentList;
-        }
-        if (!commentPage.has_more) {
-            // 没有更多评论了
-            return subCommentList;
-        }
-        // 继续获取其他子评论
+        if (count >= limit) return subCommentList;
+        if (!commentPage.has_more) return subCommentList;
+
+        // 递归获取更多子评论
         const list = await this.getNoteSubComments(
             postParam,
             rootCommentId,
@@ -208,6 +162,7 @@ export class Processor extends TaskProcessor<FormSchema, Comment[]> {
         return subCommentList;
     }
 
+    // 计算评论数量，包括子评论
     getCommentCount = (comments: Comment[]): number => {
         return comments
             .map((o) => o.sub_comments?.length ?? 0)
