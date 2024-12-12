@@ -1,4 +1,5 @@
 import { CollapsibleItem, Item } from "@/components/popup/item";
+import { Search } from "lucide-react"; // 导入新的图标，用于搜索功能
 // 导入 `CollapsibleItem` 和 `Item` 组件，分别用于可折叠项和普通项。
 
 import { PopupProps } from "@/platforms";
@@ -49,6 +50,13 @@ export default (props: PopupProps) => {
                 icon={MessageSquareText}
                 title='批量导出笔记评论'
                 onClick={() => onOpenDialog("post-comment")}
+            />
+
+            {/* 新增功能：根据搜索条件下载小红书内容 */}
+            <Item
+                icon={Search}
+                title='根据搜索条件导出内容'
+                onClick={() => onOpenDialog("search")}
             />
         </>
     );
